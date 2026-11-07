@@ -14,16 +14,6 @@ main{max-width:1000px;margin:18px auto;padding:0 12px}
 nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 
 Deploy this project
-       <!DOCTYPE html>
-<html lang="gu">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;color:#202733}
-header{background:#176b45;color:white;padding:18px;text-align:center}
-main{max-width:1000px;margin:18px auto;padding:0 12px}
-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 button{background:#176b45;color:white;border:0;border-radius:7px;padding:10px 14px;cursor:pointer}
 button.secondary{background:#526170}
 .panel{background:white;padding:16px;border-radius:10px;margin-bottom:14px;box-shadow:0 1px 5px #0001}
@@ -83,7 +73,128 @@ document.getElementById('date').value=new Date().toISOString().slice(0,10);
 addRow();
 </script>
 </body></html>
-        function doGet() {
+const SHEET_NAME = 'Shri Vishvarath Agro Center';
+const PROP_KEY = 'AGRO_SPREADSHEET_ID';
+
+function doGet() {
+  setup_();
+  return HtmlService.createHtmlOutputFromFile('index')
+    .setTitle('શ્રી વિશ્વરથ એગ્રો સેન્ટર')
+    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+}
+
+function setup_() {
+  const props = PropertiesService.getScriptProperties();
+  let id = props.getProperty(PROP_KEY);
+  let ss;
+  if (id) {
+    try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; }
+  }
+  if (!ss) {
+    ss = SpreadsheetApp.create(SHEET_NAME + ' - હિસાબ');
+    props.setProperty(PROP_KEY, ss.getId());
+  }
+  ensureSheet_(ss, 'Bills', ['Bill No','Date','Farmer','Mobile','Item','Qty','Rate','Amount','Paid','Note']);
+  ensureSheet_(ss, 'Stock', ['Item','Opening Stock','Purchased','Sold','Balance','Rate']);
+  ensureSheet_(ss, 'Farmers', ['Farmer','Mobile','Address']);
+  return ss;
+}
+
+function ensureSheet_(ss, name, headers) {
+  let sh = ss.getSheetByName(name);
+  if (!sh) sh = ss.insertSheet(name);
+  if (sh.getLastRow() === 0) {
+    sh.getRange(1,1,1,headers.length).setValues([headers]);
+    sh.setFrozenRows(1);
+  }
+  return sh;
+}
+
+function saveBill(data) {
+  if (!data || !data.farmer || !data.date) throw new Error('ખેડૂતનું નામ અને તારીખ જરૂરી છે.');
+  const items = (data.items || []).filter(x => x.name && Number(x.qty) > 0);
+  if (!items.length) throw new Error('ઓછામાં ઓછી એક વસ્તુ ઉમેરો.');
+  const ss = setup_();
+  const sh = ss.getSheetByName('Bills');
+  const billNo = 'B' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
+  const paid = Number(data.paid || 0);
+  const total = items.reduce((s,x) => s + Number(x.qty) * Number(x.rate), 0);
+  const rows = items.map(x => [billNo, data.date, data.farmer, data.mobile || '', x.name, Number(x.qty), Number(x.rate), Number(x.qty)*Number(x.rate), paid, data.note || '']);
+  sh.getRange(sh.getLastRow()+1,1,rows.length,10).setValues(rows);
+  items.forEach(x => updateStock_(ss, x.name, Number(x.qty), Number(x.rate)));
+  return {billNo, total, balance: total-paid, message:'બિલ સાચવાઈ ગયું.'};
+}
+
+function updateStock_(ss, item, sold, rate) {
+  const sh = ss.getSheetByName('Stock');
+  const values = sh.getDataRange().getValues();
+  let row = values.findIndex((r,i) => i > 0 && String(r[0]).trim().toLowerCase() === item.trim().toLowerCase());
+  if (row < 0) {
+    sh.appendRow([item,0,0,sold,-sold,rate]);
+  } else {
+    const r = row + 1;
+    const opening = Number(sh.getRange(r,2).getValue() || 0);
+    const purchased = Number(sh.getRange(r,3).getValue() || 0);
+    const oldSold = Number(sh.getRange(r,4).getValue() || 0);
+    sh.getRange(r,4).setValue(oldSold + sold);
+    sh.getRange(r,5).setValue(opening + purchased - oldSold - sold);
+    if (rate) sh.getRange(r,6).setValue(rate);
+  }
+}
+
+function getBills() {
+  const sh = setup_().getSheetByName('Bills');
+  const v = sh.getDataRange().getValues();
+  if (v.length < 2) return [];
+  const map = {};
+  v.slice(1).forEach(r => {
+    const id = String(r[0]);
+    if (!map[id]) map[id] = {billNo:id,date:r[1],farmer:r[2],mobile:r[3],items:[],paid:Number(r[8]||0),note:r[9],total:0};
+    map[id].items.push({name:r[4],qty:Number(r[5]),rate:Number(r[6]),amount:Number(r[7])});
+    map[id].total += Number(r[7]||0);
+  });
+  return Object.values(map).reverse();
+}
+
+function getLedger(farmer) {
+  const bills = getBills().filter(b => b.farmer === farmer);
+  return bills.map(b => ({billNo:b.billNo,date:b.date,total:b.total,paid:b.paid,balance:b.total-b.paid}));
+}
+
+function getFarmers() {
+  const v = setup_().getSheetByName('Bills').getDataRange().getValues();
+  return [...new Set(v.slice(1).map(r => String(r[2]).trim()).filter(Boolean))].sort();
+}
+
+function getStock() {
+  const sh = setup_().getSheetByName('Stock');
+  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
+    item:r[0], opening:Number(r[1]||0), purchased:Number(r[2]||0),
+    sold:Number(r[3]||0), balance:Number(r[4]||0), rate:Number(r[5]||0)
+  }));
+}
+
+function addStock(data) {
+  if (!data || !data.item) throw new Error('વસ્તુનું નામ લખો.');
+  const ss = setup_(), sh = ss.getSheetByName('Stock');
+  const v = sh.getDataRange().getValues();
+  const idx = v.findIndex((r,i) => i>0 && String(r[0]).trim().toLowerCase() === data.item.trim().toLowerCase());
+  if (idx < 0) sh.appendRow([data.item,Number(data.qty||0),0,0,Number(data.qty||0),Number(data.rate||0)]);
+  else {
+    const row = idx+1, opening=Number(sh.getRange(row,2).getValue()||0);
+    const purchased=Number(sh.getRange(row,3).getValue()||0)+Number(data.qty||0);
+    const sold=Number(sh.getRange(row,4).getValue()||0);
+    sh.getRange(row,3).setValue(purchased);
+    sh.getRange(row,5).setValue(opening+purchased-sold);
+    sh.getRange(row,6).setValue(Number(data.rate||sh.getRange(row,6).getValue()||0));
+  }
+  return {message:'સ્ટોક અપડેટ થયો.'};
+}
+
+function getSpreadsheetUrl() {
+  return setup_().getUrl();
+}
+function doGet() {
   return HtmlService.createHtmlOutput(`
     <!DOCTYPE html>
     <html>
@@ -161,4 +272,4 @@ function setupSheets() {
                                                                                                                                                                   });
 
                                                                                                                                                                     SpreadsheetApp.getUi();
-                                                                                                                    
+                                                                                                                                                                    }
