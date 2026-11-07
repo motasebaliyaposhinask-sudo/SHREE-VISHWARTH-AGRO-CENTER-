@@ -10,7 +10,7 @@ index.html
 <style>
 body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;color:#202733}
 header{background:#176b45;color:white;padding:18px;text-align:center}
-main{max-width:1000px;margin:18px ato;padding:o 12px}
+main{max-width:1000px;margin:18px auto;padding:o 12px}
 nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
 
 Deploy this project
