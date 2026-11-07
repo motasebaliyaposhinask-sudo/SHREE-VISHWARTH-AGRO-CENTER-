@@ -1,275 +1,319 @@
-index.html
-.
+import streamlit as st
+import sqlite3
+import pandas as pd
+from datetime import date
 
-9101112131415161718192021222324252627282912345678
- <!DOCTYPE html>
-<html lang="gu">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<style>
-body{font-family:Arial,sans-serif;background:#f4f6f8;margin:0;color:#202733}
-header{background:#176b45;color:white;padding:18px;text-align:center}
-main{max-width:1000px;margin:18px auto;padding:o 12px}
-nav{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px}
+st.set_page_config(
+    page_title="Shree Vishwarth Agro Center",
+    page_icon="🌱",
+    layout="wide"
+)
 
-Deploy this project
-button{background:#176b45;color:white;border:0;border-radius:7px;padding:10px 14px;cursor:pointer}
-button.secondary{background:#526170}
-.panel{background:white;padding:16px;border-radius:10px;margin-bottom:14px;box-shadow:0 1px 5px #0001}
-input,select{padding:10px;border:1px solid #ccd3da;border-radius:6px;max-width:100%;box-sizing:border-box}
-.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px}
-table{width:100%;border-collapse:collapse;margin-top:10px}
-th,td{border:1px solid #dce1e6;padding:8px;text-align:left}
-th{background:#edf2ef}
-.small{font-size:13px;color:#58636e}
-.hidden{display:none}
-.actions{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
-.status{padding:10px;border-radius:7px;background:#eef7f0;margin-top:10px}
-</style>
-</head>
-<body>
-<header><h2>શ્રી વિશ્વરથ એગ્રો સેન્ટર</h2><div>બિલ બુક અને હિસાબી સિસ્ટમ</div></header>
-<main>
-<nav>
-<button onclick="show('bill')">નવું બિલ</button>
-<button class="secondary" onclick="show('old')">જૂનાં બિલ</button>
-<button class="secondary" onclick="show('ledger')">ખેડૂતનું ખાતું</button>
-<button class="secondary" onclick="show('stock')">સ્ટોક</button>
-</nav>
-<section id="bill" class="panel">
-<h3>નવું બિલ</h3>
-<div class="grid">
-<label>તારીખ<br><input id="date" type="date"></label>
-<label>ખેડૂતનું નામ *<br><input id="farmer" placeholder="ખેડૂતનું નામ"></label>
-<label>મોબાઇલ<br><input id="mobile" placeholder="મોબાઇલ નંબર"></label>
-<label>જમા રકમ<br><input id="paid" type="number" min="0" value="0"></label>
-</div>
-<h4>વસ્તુઓ (વધુમાં વધુ 15)</h4>
-<table><thead><tr><th>નં.</th><th>વસ્તુનું નામ</th><th>જથ્થો</th><th>ભાવ</th><th>રકમ</th></tr></thead><tbody id="items"></tbody></table>
-<div class="actions"><button onclick="addRow()">વસ્તુ ઉમેરો</button><button onclick="save()">બિલ સાચવો</button><button class="secondary" onclick="window.print()">પ્રિન્ટ</button></div>
-<p id="total">કુલ: ₹0</p><div id="billStatus" class="status hidden"></div>
-</section>
-<section id="old" class="panel hidden"><h3>જૂનાં બિલ</h3><button onclick="loadBills()">બિલ જુઓ</button><div id="bills"></div></section>
-<section id="ledger" class="panel hidden"><h3>ખેડૂત પ્રમાણે ખાતું</h3><div class="actions"><select id="farmerList"></select><button onclick="loadLedger()">ખાતું જુઓ</button></div><div id="ledgerData"></div></section>
-<section id="stock" class="panel hidden"><h3>સ્ટોક પત્રક</h3><div class="grid"><label>વસ્તુનું નામ<br><input id="stockItem"></label><label>જથ્થો ઉમેરો<br><input id="stockQty" type="number" min="0"></label><label>ભાવ<br><input id="stockRate" type="number" min="0"></label></div><div class="actions"><button onclick="addStock()">સ્ટોક ઉમેરો</button><button class="secondary" onclick="loadStock()">સ્ટોક જુઓ</button></div><div id="stockData"></div></section>
-<p class="small">તમારો ડેટા Google Sheets માં સાચવાશે. પ્રથમ વખત મંજૂરી માંગવામાં આવી શકે છે.</p>
-<div class="actions"><button class="secondary" onclick="openSheet()">હિસાબની Google Sheet ખોલો</button></div>
-</main>
-<script>
-let count=0;
-function show(id){['bill','old','ledger','stock'].forEach(x=>document.getElementById(x).classList.toggle('hidden',x!==id));if(id==='ledger')loadFarmers();if(id==='stock')loadStock();}
-function addRow(){if(count>=15){alert('એક બિલમાં વધુમાં વધુ 15 વસ્તુ જ ઉમેરી શકો.');return;}count++;const tr=document.createElement('tr');tr.innerHTML=<td>${count}</td><td><input class="nm" placeholder="વસ્તુનું નામ"></td><td><input class="qty" type="number" min="0" step="any" value="1" oninput="calc()"></td><td><input class="rate" type="number" min="0" step="any" value="0" oninput="calc()"></td><td class="amt">0</td>;document.getElementById('items').appendChild(tr);}
-function calc(){let total=0;document.querySelectorAll('#items tr').forEach(r=>{let q=Number(r.querySelector('.qty').value||0),p=Number(r.querySelector('.rate').value||0),a=q*p; r.querySelector('.amt').textContent=a.toFixed(2);total+=a;});document.getElementById('total').textContent='કુલ: ₹'+total.toFixed(2);}
-function save(){const items=[...document.querySelectorAll('#items tr')].map(r=>({name:r.querySelector('.nm').value.trim(),qty:r.querySelector('.qty').value,rate:r.querySelector('.rate').value}));const data={date:document.getElementById('date').value,farmer:document.getElementById('farmer').value.trim(),mobile:document.getElementById('mobile').value.trim(),paid:document.getElementById('paid').value,items};google.script.run.withSuccessHandler(r=>{let e=document.getElementById('billStatus');e.classList.remove('hidden');e.textContent=${r.message} બિલ નંબર: ${r.billNo} | કુલ: ₹${r.total.toFixed(2)} | બાકી: ₹${r.balance.toFixed(2)};}).withFailureHandler(e=>alert(e.message)).saveBill(data);}
-function table(headers,rows){return '<table><thead><tr>'+headers.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+rows.map(r=>'<tr>'+r.map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table>';}
-function loadBills(){google.script.run.withSuccessHandler(a=>{document.getElementById('bills').innerHTML=a.length?table(['બિલ નંબર','તારીખ','ખેડૂત','કુલ','જમા','બાકી'],a.map(b=>[b.billNo,b.date,b.farmer,'₹'+b.total,'₹'+b.paid,'₹'+(b.total-b.paid)])):'હજુ કોઈ બિલ નથી.';}).getBills();}
-function loadFarmers(){google.script.run.withSuccessHandler(a=>{document.getElementById('farmerList').innerHTML=a.map(x=><option>${x}</option>).join('');}).getFarmers();}
-function loadLedger(){let f=document.getElementById('farmerList').value;google.script.run.withSuccessHandler(a=>{document.getElementById('ledgerData').innerHTML=a.length?table(['બિલ નંબર','તારીખ','કુલ','જમા','બાકી'],a.map(x=>[x.billNo,x.date,'₹'+x.total,'₹'+x.paid,'₹'+x.balance])):'આ ખેડૂતનું બિલ મળ્યું નથી.';}).getLedger(f);}
-function loadStock(){google.script.run.withSuccessHandler(a=>{document.getElementById('stockData').innerHTML=a.length?table(['વસ્તુ','શરૂઆત','ખરીદી','વેચાણ','બાકી','ભાવ'],a.map(x=>[x.item,x.opening,x.purchased,x.sold,x.balance,'₹'+x.rate])):'સ્ટોક ખાલી છે.';}).getStock();}
-function addStock(){google.script.run.withSuccessHandler(r=>{alert(r.message);loadStock();}).withFailureHandler(e=>alert(e.message)).addStock({item:document.getElementById('stockItem').value.trim(),qty:document.getElementById('stockQty').value,rate:document.getElementById('stockRate').value});}
-function openSheet(){google.script.run.withSuccessHandler(u=>window.open(u,'_blank')).getSpreadsheetUrl();}
-document.getElementById('date').value=new Date().toISOString().slice(0,10);
-addRow();
-</script>
-</body></html>
-const SHEET_NAME = 'Shri Vishvarath Agro Center';
-const PROP_KEY = 'AGRO_SPREADSHEET_ID';
+# Database
+conn = sqlite3.connect("agro_center.db", check_same_thread=False)
+cur = conn.cursor()
 
-function doGet() {
-  setup_();
-  return HtmlService.createHtmlOutputFromFile('index')
-    .setTitle('શ્રી વિશ્વરથ એગ્રો સેન્ટર')
-    .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
-}
+cur.execute("""
+CREATE TABLE IF NOT EXISTS customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    mobile TEXT,
+    address TEXT
+)
+""")
 
-function setup_() {
-  const props = PropertiesService.getScriptProperties();
-  let id = props.getProperty(PROP_KEY);
-  let ss;
-  if (id) {
-    try { ss = SpreadsheetApp.openById(id); } catch (e) { ss = null; }
-  }
-  if (!ss) {
-    ss = SpreadsheetApp.create(SHEET_NAME + ' - હિસાબ');
-    props.setProperty(PROP_KEY, ss.getId());
-  }
-  ensureSheet_(ss, 'Bills', ['Bill No','Date','Farmer','Mobile','Item','Qty','Rate','Amount','Paid','Note']);
-  ensureSheet_(ss, 'Stock', ['Item','Opening Stock','Purchased','Sold','Balance','Rate']);
-  ensureSheet_(ss, 'Farmers', ['Farmer','Mobile','Address']);
-  return ss;
-}
+cur.execute("""
+CREATE TABLE IF NOT EXISTS products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT,
+    price REAL,
+    stock REAL
+)
+""")
 
-function ensureSheet_(ss, name, headers) {
-  let sh = ss.getSheetByName(name);
-  if (!sh) sh = ss.insertSheet(name);
-  if (sh.getLastRow() === 0) {
-    sh.getRange(1,1,1,headers.length).setValues([headers]);
-    sh.setFrozenRows(1);
-  }
-  return sh;
-}
+cur.execute("""
+CREATE TABLE IF NOT EXISTS transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    entry_date TEXT,
+    entry_type TEXT,
+    customer TEXT,
+    product TEXT,
+    quantity REAL,
+    rate REAL,
+    total REAL,
+    payment REAL,
+    note TEXT
+)
+""")
 
-function saveBill(data) {
-  if (!data || !data.farmer || !data.date) throw new Error('ખેડૂતનું નામ અને તારીખ જરૂરી છે.');
-  const items = (data.items || []).filter(x => x.name && Number(x.qty) > 0);
-  if (!items.length) throw new Error('ઓછામાં ઓછી એક વસ્તુ ઉમેરો.');
-  const ss = setup_();
-  const sh = ss.getSheetByName('Bills');
-  const billNo = 'B' + Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyMMdd-HHmmss');
-  const paid = Number(data.paid || 0);
-  const total = items.reduce((s,x) => s + Number(x.qty) * Number(x.rate), 0);
-  const rows = items.map(x => [billNo, data.date, data.farmer, data.mobile || '', x.name, Number(x.qty), Number(x.rate), Number(x.qty)*Number(x.rate), paid, data.note || '']);
-  sh.getRange(sh.getLastRow()+1,1,rows.length,10).setValues(rows);
-  items.forEach(x => updateStock_(ss, x.name, Number(x.qty), Number(x.rate)));
-  return {billNo, total, balance: total-paid, message:'બિલ સાચવાઈ ગયું.'};
-}
+conn.commit()
 
-function updateStock_(ss, item, sold, rate) {
-  const sh = ss.getSheetByName('Stock');
-  const values = sh.getDataRange().getValues();
-  let row = values.findIndex((r,i) => i > 0 && String(r[0]).trim().toLowerCase() === item.trim().toLowerCase());
-  if (row < 0) {
-    sh.appendRow([item,0,0,sold,-sold,rate]);
-  } else {
-    const r = row + 1;
-    const opening = Number(sh.getRange(r,2).getValue() || 0);
-    const purchased = Number(sh.getRange(r,3).getValue() || 0);
-    const oldSold = Number(sh.getRange(r,4).getValue() || 0);
-    sh.getRange(r,4).setValue(oldSold + sold);
-    sh.getRange(r,5).setValue(opening + purchased - oldSold - sold);
-    if (rate) sh.getRange(r,6).setValue(rate);
-  }
-}
+# Header
+st.title("🌱 શ્રી વિશ્વરથ એગ્રો સેન્ટર")
+st.caption("Billing | Purchase | Sales | Customer Account")
 
-function getBills() {
-  const sh = setup_().getSheetByName('Bills');
-  const v = sh.getDataRange().getValues();
-  if (v.length < 2) return [];
-  const map = {};
-  v.slice(1).forEach(r => {
-    const id = String(r[0]);
-    if (!map[id]) map[id] = {billNo:id,date:r[1],farmer:r[2],mobile:r[3],items:[],paid:Number(r[8]||0),note:r[9],total:0};
-    map[id].items.push({name:r[4],qty:Number(r[5]),rate:Number(r[6]),amount:Number(r[7])});
-    map[id].total += Number(r[7]||0);
-  });
-  return Object.values(map).reverse();
-}
+st.divider()
 
-function getLedger(farmer) {
-  const bills = getBills().filter(b => b.farmer === farmer);
-  return bills.map(b => ({billNo:b.billNo,date:b.date,total:b.total,paid:b.paid,balance:b.total-b.paid}));
-}
+# Sidebar
+st.sidebar.title("મુખ્ય મેનુ")
 
-function getFarmers() {
-  const v = setup_().getSheetByName('Bills').getDataRange().getValues();
-  return [...new Set(v.slice(1).map(r => String(r[2]).trim()).filter(Boolean))].sort();
-}
+menu = st.sidebar.radio(
+    "વિભાગ પસંદ કરો",
+    [
+        "ડેશબોર્ડ",
+        "ગ્રાહક ઉમેરો",
+        "પ્રોડક્ટ ઉમેરો",
+        "વેચાણ બિલ",
+        "ખરીદી એન્ટ્રી",
+        "હિસાબ અને લેણું",
+        "ડેટા બેકઅપ"
+    ]
+)
 
-function getStock() {
-  const sh = setup_().getSheetByName('Stock');
-  return sh.getDataRange().getValues().slice(1).filter(r => r[0]).map(r => ({
-    item:r[0], opening:Number(r[1]||0), purchased:Number(r[2]||0),
-    sold:Number(r[3]||0), balance:Number(r[4]||0), rate:Number(r[5]||0)
-  }));
-}
+# Dashboard
+if menu == "ડેશબોર્ડ":
 
-function addStock(data) {
-  if (!data || !data.item) throw new Error('વસ્તુનું નામ લખો.');
-  const ss = setup_(), sh = ss.getSheetByName('Stock');
-  const v = sh.getDataRange().getValues();
-  const idx = v.findIndex((r,i) => i>0 && String(r[0]).trim().toLowerCase() === data.item.trim().toLowerCase());
-  if (idx < 0) sh.appendRow([data.item,Number(data.qty||0),0,0,Number(data.qty||0),Number(data.rate||0)]);
-  else {
-    const row = idx+1, opening=Number(sh.getRange(row,2).getValue()||0);
-    const purchased=Number(sh.getRange(row,3).getValue()||0)+Number(data.qty||0);
-    const sold=Number(sh.getRange(row,4).getValue()||0);
-    sh.getRange(row,3).setValue(purchased);
-    sh.getRange(row,5).setValue(opening+purchased-sold);
-    sh.getRange(row,6).setValue(Number(data.rate||sh.getRange(row,6).getValue()||0));
-  }
-  return {message:'સ્ટોક અપડેટ થયો.'};
-}
+    st.header("ડેશબોર્ડ")
 
-function getSpreadsheetUrl() {
-  return setup_().getUrl();
-}
-function doGet() {
-  return HtmlService.createHtmlOutput(`
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <style>
-          body {
-            font-family: Arial, sans-serif;
-            padding: 20px;
-            background: #f3f6f4;
-          }
-          h2 { color: #176b3a; }
-          .card {
-            background: white;
-            padding: 18px;
-            border-radius: 12px;
-            margin-bottom: 15px;
-          }
-        </style>
-      </head>
-      <body>
-        <div class="card">
-          <h2>શ્રી વિશ્વરથ એગ્રો સેન્ટર</h2>
-          <p>ખેડૂત બિલ બુક અને હિસાબી સિસ્ટમ</p>
-        </div>
-        <div class="card">
-          <h3>સિસ્ટમ તૈયાર કરવાની શરૂઆત થઈ ગઈ છે.</h3>
-          <p>આગળ બિલ બુક, સ્ટોક અને ખેડૂતવાઇઝ લેજર જોડવામાં આવશે.</p>
-        </div>
-      </body>
-    </html>
-  `).setTitle('શ્રી વિશ્વરથ એગ્રો સેન્ટર');
-}
+    customers = pd.read_sql_query(
+        "SELECT * FROM customers", conn
+    )
 
-function setupSheets() {
-  const ss = SpreadsheetApp.openById(
-      '1HXTj0ifyJPf-gb0xxG_Qn-LZ7Nkyy0YqSDtc2RS_whk'
-        );
+    transactions = pd.read_sql_query(
+        "SELECT * FROM transactions", conn
+    )
 
-          const sheets = {
-              Bills: [
-                    'Bill No', 'Date', 'Farmer Name',
-                          'Total', 'Paid', 'Balance'
-                              ],
-                                  BillItems: [
-                                        'Bill No', 'Item Name', 'Quantity',
-                                              'Rate', 'Amount'
-                                                  ],
-                                                      Farmers: [
-                                                            'Farmer ID', 'Farmer Name',
-                                                                  'Mobile', 'Address', 'Opening Balance'
-                                                                      ],
-                                                                          Stock: [
-                                                                                'Item Name', 'Opening Stock',
-                                                                                      'Purchase', 'Sold', 'Closing Stock'
-                                                                                          ],
-                                                                                              Ledger: [
-                                                                                                    'Date', 'Farmer Name', 'Details',
-                                                                                                          'Jama', 'Udhar', 'Balance'
-                                                                                                              ]
-                                                                                                                };
+    col1, col2, col3 = st.columns(3)
 
-                                                                                                                  Object.entries(sheets).forEach(([name, headers]) => {
-                                                                                                                      let sh = ss.getSheetByName(name);
+    col1.metric("કુલ ગ્રાહકો", len(customers))
 
-                                                                                                                          if (!sh) {
-                                                                                                                                sh = ss.insertSheet(name);
-                                                                                                                                    }
+    if not transactions.empty:
+        sales = transactions[
+            transactions["entry_type"] == "વેચાણ"
+        ]["total"].sum()
 
-                                                                                                                                        if (sh.getLastRow() === 0) {
-                                                                                                                                              sh.getRange(1, 1, 1, headers.length)
-                                                                                                                                                      .setValues([headers]);
-                                                                                                                                                            sh.setFrozenRows(1);
-                                                                                                                                                                }
-                                                                                                                                                                  });
+        purchase = transactions[
+            transactions["entry_type"] == "ખરીદી"
+        ]["total"].sum()
+    else:
+        sales = 0
+        purchase = 0
 
-                                                                                                                                                                    SpreadsheetApp.getUi();
-                                                                                                                                                                    }
+    col2.metric("કુલ વેચાણ", f"₹ {sales:,.2f}")
+    col3.metric("કુલ ખરીદી", f"₹ {purchase:,.2f}")
+
+    st.subheader("તાજેતરની એન્ટ્રી")
+
+    st.dataframe(
+        transactions.tail(10),
+        use_container_width=True
+    )
+
+# Add Customer
+elif menu == "ગ્રાહક ઉમેરો":
+
+    st.header("નવો ગ્રાહક ઉમેરો")
+
+    with st.form("customer_form"):
+
+        name = st.text_input("ગ્રાહકનું નામ")
+        mobile = st.text_input("મોબાઇલ નંબર")
+        address = st.text_area("સરનામું")
+
+        submit = st.form_submit_button("ગ્રાહક સેવ કરો")
+
+        if submit:
+            if name.strip():
+                cur.execute(
+                    "INSERT INTO customers (name,mobile,address) VALUES (?,?,?)",
+                    (name, mobile, address)
+                )
+                conn.commit()
+                st.success("ગ્રાહક સફળતાપૂર્વક સેવ થયો.")
+            else:
+                st.error("ગ્રાહકનું નામ લખો.")
+
+    st.subheader("ગ્રાહકોની યાદી")
+
+    st.dataframe(
+        pd.read_sql_query("SELECT * FROM customers", conn),
+        use_container_width=True
+    )
+
+# Add Product
+elif menu == "પ્રોડક્ટ ઉમેરો":
+
+    st.header("નવો પ્રોડક્ટ ઉમેરો")
+
+    with st.form("product_form"):
+
+        product = st.text_input("પ્રોડક્ટનું નામ")
+        price = st.number_input("ભાવ", min_value=0.0)
+        stock = st.number_input("જથ્થો", min_value=0.0)
+
+        submit = st.form_submit_button("પ્રોડક્ટ સેવ કરો")
+
+        if submit:
+            if product.strip():
+                cur.execute(
+                    "INSERT INTO products (name,price,stock) VALUES (?,?,?)",
+                    (product, price, stock)
+                )
+                conn.commit()
+                st.success("પ્રોડક્ટ સેવ થયો.")
+            else:
+                st.error("પ્રોડક્ટનું નામ લખો.")
+
+    st.dataframe(
+        pd.read_sql_query("SELECT * FROM products", conn),
+        use_container_width=True
+    )
+
+# Sales and Purchase
+elif menu in ["વેચાણ બિલ", "ખરીદી એન્ટ્રી"]:
+
+    is_sale = menu == "વેચાણ બિલ"
+    entry_type = "વેચાણ" if is_sale else "ખરીદી"
+
+    st.header(menu)
+
+    customers = pd.read_sql_query(
+        "SELECT name FROM customers", conn
+    )
+
+    products = pd.read_sql_query(
+        "SELECT name,price FROM products", conn
+    )
+
+    with st.form("transaction_form"):
+
+        entry_date = st.date_input("તારીખ", date.today())
+
+        customer_list = (
+            customers["name"].tolist()
+            if not customers.empty else []
+        )
+
+        product_list = (
+            products["name"].tolist()
+            if not products.empty else []
+        )
+
+        customer = st.selectbox(
+            "ગ્રાહક / સપ્લાયર",
+            customer_list + ["નવો / અન્ય"]
+        )
+
+        product = st.selectbox(
+            "પ્રોડક્ટ",
+            product_list if product_list else ["પ્રોડક્ટ ઉમેરો"]
+        )
+
+        quantity = st.number_input(
+            "જથ્થો", min_value=0.0, step=1.0
+        )
+
+        rate = st.number_input(
+            "ભાવ", min_value=0.0
+        )
+
+        payment = st.number_input(
+            "મળેલ / ચૂકવેલ રકમ",
+            min_value=0.0
+        )
+
+        note = st.text_input("નોંધ")
+
+        total = quantity * rate
+
+        st.write(f"*કુલ રકમ: ₹ {total:,.2f}*")
+
+        submit = st.form_submit_button("એન્ટ્રી સેવ કરો")
+
+        if submit:
+            if quantity > 0 and rate >= 0:
+                cur.execute("""
+                    INSERT INTO transactions
+                    (entry_date,entry_type,customer,product,
+                    quantity,rate,total,payment,note)
+                    VALUES (?,?,?,?,?,?,?,?,?)
+                """, (
+                    str(entry_date), entry_type, customer,
+                    product, quantity, rate, total,
+                    payment, note
+                ))
+
+                conn.commit()
+                st.success("એન્ટ્રી સફળતાપૂર્વક સેવ થઈ.")
+            else:
+                st.error("જથ્થો યોગ્ય રીતે દાખલ કરો.")
+
+# Ledger
+elif menu == "હિસાબ અને લેણું":
+
+    st.header("ગ્રાહક હિસાબ અને લેણું")
+
+    data = pd.read_sql_query(
+        "SELECT * FROM transactions", conn
+    )
+
+    if not data.empty:
+
+        st.dataframe(data, use_container_width=True)
+
+        customer_names = data["customer"].unique().tolist()
+
+        selected = st.selectbox(
+            "ગ્રાહક પસંદ કરો", customer_names
+        )
+
+        customer_data = data[
+            data["customer"] == selected
+        ]
+
+        sales = customer_data[
+            customer_data["entry_type"] == "વેચાણ"
+        ]["total"].sum()
+
+        purchases = customer_data[
+            customer_data["entry_type"] == "ખરીદી"
+        ]["total"].sum()
+
+        payments = customer_data["payment"].sum()
+
+        col1, col2, col3 = st.columns(3)
+
+        col1.metric("વેચાણ", f"₹ {sales:,.2f}")
+        col2.metric("ખરીદી", f"₹ {purchases:,.2f}")
+        col3.metric("જમા / ચૂકવણી", f"₹ {payments:,.2f}")
+
+        st.dataframe(
+            customer_data,
+            use_container_width=True
+        )
+
+    else:
+        st.info("હજુ કોઈ હિસાબ ઉપલબ્ધ નથી.")
+
+# Backup
+elif menu == "ડેટા બેકઅપ":
+
+    st.header("ડેટા બેકઅપ")
+
+    for table in ["customers", "products", "transactions"]:
+
+        df = pd.read_sql_query(
+            f"SELECT * FROM {table}", conn
+        )
+
+        st.download_button(
+            label=f"{table} CSV ડાઉનલોડ કરો",
+            data=df.to_csv(index=False).encode("utf-8-sig"),
+            file_name=f"{table}_backup.csv",
+            mime="text/csv"
+        )
+
+    st.success("તમારો ડેટા CSV સ્વરૂપે બેકઅપ લઈ શકો છો.")
+
+st.divider()
+st.caption("© Shree Vishwarth Agro Center")
